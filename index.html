@@ -676,7 +676,7 @@ function buildMap(){
   const grid=sv("g",{opacity:".35"});
   for(let lo=-180;lo<=180;lo+=30){const a=proj(lo,80),b=proj(lo,-58);grid.append(sv("line",{x1:a[0],y1:a[1],x2:b[0],y2:b[1],stroke:"var(--landline)","stroke-width":".4","vector-effect":"non-scaling-stroke"}));}
   for(let la=-60;la<=80;la+=30){const a=proj(-180,la),b=proj(180,la);grid.append(sv("line",{x1:a[0],y1:a[1],x2:b[0],y2:b[1],stroke:"var(--landline)","stroke-width":".4","vector-effect":"non-scaling-stroke"}));}
-    const pins=sv("g",{});const cg=sv("g",{});const cl2=sv("g",{});MAP.cl=cl2;svg.append(sv("rect",{x:-200,y:-200,width:1400,height:1400,fill:"var(--sea)"}),grid,land,cg,cl2,pins);MAP.cg=cg;
+    const pins=sv("g",{});const cg=sv("g",{});const cl2=sv("g",{});MAP.cl=cl2;svg.append(sv("rect",{x:-200,y:-200,width:1400,height:1400,fill:"var(--sea)"}),grid,land,cg,cl2,pins);MAP.cg=cg;MAP.ckey=null;
   wrap.append(svg);
   const btns=el("div","mapbtns");
   const zi=el("button",null,"+");zi.setAttribute("aria-label",T("Nagyítás"));zi.onclick=()=>zoomBy(.6);
@@ -694,13 +694,13 @@ function buildMap(){
   const startPinch=()=>{const [a,b]=[...pts.values()];const r=svg.getBoundingClientRect();const mx=(a.x+b.x)/2,my=(a.y+b.y)/2;const fx=(mx-r.left)/r.width,fy=(my-r.top)/r.height;const v=MAP.vb;pz={d:Math.hypot(a.x-b.x,a.y-b.y)||1,w:v.w,px:v.x+fx*v.w,py:v.y+fy*v.h};pan=null;};
   svg.addEventListener("pointerdown",e=>{measure();pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
     if(pts.size===1){MAP.moved=false;startPan(pts.get(e.pointerId));}else if(pts.size===2){MAP.moved=true;try{for(const id of pts.keys())svg.setPointerCapture(id);}catch(_){ }startPinch();}});
-  let raf=0;const flush=()=>{raf=0;clampView();applyView();};const sched=()=>{if(!raf)raf=requestAnimationFrame(flush);};
+  let raf=0,full=false;const flush=()=>{raf=0;clampView();if(full){full=false;applyView();}else{const v=MAP.vb;MAP.svg.setAttribute("viewBox",`${v.x} ${v.y} ${v.w} ${v.h}`);}};const sched=(f=true)=>{if(f)full=true;if(!raf)raf=requestAnimationFrame(flush);};
   svg.addEventListener("pointermove",e=>{
     if(!pts.has(e.pointerId))return;pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
     if(pts.size>=2&&pz){const [a,b]=[...pts.values()];const d=Math.hypot(a.x-b.x,a.y-b.y)||1;const r=svg.getBoundingClientRect();const mx=(a.x+b.x)/2,my=(a.y+b.y)/2;const fx=(mx-r.left)/r.width,fy=(my-r.top)/r.height;
       const w=Math.max(8,Math.min(1000,pz.w*pz.d/d)),h=w*MAP.H/MAP.W;const v=MAP.vb;v.w=w;v.h=h;v.x=pz.px-fx*w;v.y=pz.py-fy*h;MAP.moved=true;sched();return;}
     if(pan&&pts.size===1){const pt=pts.get(e.pointerId);const dx=pt.x-pan.sx,dy=pt.y-pan.sy;if(!MAP.moved&&Math.hypot(dx,dy)>6){MAP.moved=true;try{svg.setPointerCapture(e.pointerId);}catch(_){ }}
-      if(MAP.moved){const k=MAP.vb.w/MAP.W;MAP.vb.x=pan.vx-dx*k;MAP.vb.y=pan.vy-dy*k;sched();}}
+      if(MAP.moved){const k=MAP.vb.w/MAP.W;MAP.vb.x=pan.vx-dx*k;MAP.vb.y=pan.vy-dy*k;sched(false);}}
   });
   const end=e=>{if(!pts.has(e.pointerId))return;pts.delete(e.pointerId);try{svg.releasePointerCapture(e.pointerId);}catch(_){ }
     if(pts.size===1){pz=null;startPan([...pts.values()][0]);}else if(pts.size===0){pan=null;pz=null;setTimeout(()=>{MAP.moved=false;},0);}};
@@ -728,7 +728,7 @@ function showCard(f){
 function drawPins(){
   const g=MAP.pins;if(!g)return;g.replaceChildren();const v=MAP.vb,k=v.w/MAP.W;let list=visible();
   const vc=new Set(list.map(f=>f.c));
-  if(MAP.cg){MAP.cg.replaceChildren();
+  const ckey=[...vc].sort().join()+"|"+MAP.only+"|"+S.been.size;if(MAP.cg&&MAP.ckey!==ckey){MAP.ckey=ckey;MAP.cg.replaceChildren();
     const seen=new Set(FESTS.filter(f=>S.been.has(f.id)).map(f=>f.c));
     vc.forEach(c=>{const been=MAP.only&&seen.has(c);(CPOLY[c]||[]).forEach(p=>MAP.cg.append(sv("path",{d:pathOf(p),fill:"var(--accent)","fill-opacity":been?".55":".12",stroke:"var(--accent)","stroke-opacity":been?"1":".45","stroke-width":been?"1.2":"1","vector-effect":"non-scaling-stroke"})));});
     if(false)vc.forEach(c=>{const p=(CPOLY[c]||[])[0];if(!p)return;const m=p.reduce((a,q)=>[a[0]+q[0]/p.length,a[1]+q[1]/p.length],[0,0]);const [x,y]=proj(m[0],m[1]);const t=sv("text",{x,y,"font-size":13*k,"text-anchor":"middle",fill:"var(--muted)","fill-opacity":".8","font-family":"DM Sans, sans-serif","font-weight":"700","letter-spacing":2*k});t.textContent=(COUNTRY[c]||c).toUpperCase();MAP.cg.append(t);});
